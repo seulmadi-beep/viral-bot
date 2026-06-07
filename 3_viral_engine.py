@@ -66,8 +66,12 @@ Return ONLY valid JSON:
     return json.loads(raw)
 
 def generate_voice(text, output_path):
-    from gtts import gTTS
-    gTTS(text=text, lang='en').save(output_path)
+    import pyttsx3
+    engine = pyttsx3.init()
+    engine.setProperty('rate', 150)
+    engine.save_to_file(text, output_path)
+    engine.runAndWait()
+
 
 
 def create_video(script_data, audio_path, output_path):
