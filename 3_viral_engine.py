@@ -65,7 +65,7 @@ Return ONLY valid JSON:
     raw = response.choices[0].message.content.strip().replace("```json","").replace("```","").strip()
     return json.loads(raw)
 
-asyncdef generate_voice(text, output_path):
+def generate_voice(text, output_path):
     from gtts import gTTS
     gTTS(text=text, lang='en').save(output_path)
 
