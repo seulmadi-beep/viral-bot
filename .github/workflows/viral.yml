@@ -1,20 +1,30 @@
 name: Viral Bot
-on: [push, workflow_dispatch]
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 9 * * *"
+
 jobs:
-  run:
+  run-bot:
     runs-on: ubuntu-latest
     timeout-minutes: 6
+
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      - name: FFmpeg
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --fix-missing ffmpeg
-      run: python3 3_viral_engine.py
- env:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Run bot
+        env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python3 3_viral_engine.py
