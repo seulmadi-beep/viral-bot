@@ -66,11 +66,10 @@ Return ONLY valid JSON:
     return json.loads(raw)
 
 def generate_voice(text, output_path):
-    import pyttsx3
-    engine = pyttsx3.init()
-    engine.setProperty('rate', 150)
-    engine.save_to_file(text, output_path)
-    engine.runAndWait()
+    from gtts import gTTS
+    tts = gTTS(text=text, lang='en', slow=False)
+    tts.save(output_path)
+
 
 
 
