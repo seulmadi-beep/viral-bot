@@ -184,6 +184,11 @@ async def main():
         except KeyboardInterrupt: break
         except Exception as e: send_msg(f"⚠️ خطا: `{str(e)[:100]}`")
         await asyncio.sleep(12*3600)
-
 if __name__=="__main__":
-    asyncio.run(main())
+    import sys
+    if "--once" in sys.argv:
+        asyncio.run(run_once())
+    else:
+        asyncio.run(main())
+
+if __
