@@ -1,4 +1,4 @@
-gtts
+pyttsx3
 requests
 groq
 python-dotenv
