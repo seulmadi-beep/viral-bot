@@ -65,10 +65,10 @@ Return ONLY valid JSON:
     raw = response.choices[0].message.content.strip().replace("```json","").replace("```","").strip()
     return json.loads(raw)
 
-async def generate_voice(text, output_path, voice="en-US-ChristopherNeural"):
-    import edge_tts
-    tts = edge_tts.Communicate(text, voice, rate="+10%")
-    await tts.save(output_path)
+asyncdef generate_voice(text, output_path):
+    from gtts import gTTS
+    gTTS(text=text, lang='en').save(output_path)
+
 
 def create_video(script_data, audio_path, output_path):
     from PIL import Image, ImageDraw
@@ -163,7 +163,7 @@ async def run_once():
     trends=get_trending_topics()
     script=generate_script(trends)
     audio=str(OUTPUT_DIR/f"audio_{ts}.mp3")
-    await generate_voice(script["script"],audio)
+    generate_voice(script["script"],audio)
     video=str(OUTPUT_DIR/f"video_{ts}.mp4")
     create_video(script,audio,video)
     cb=send_to_telegram(script,video)
