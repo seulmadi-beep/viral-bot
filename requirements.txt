@@ -1,4 +1,4 @@
-edge-tts
+gtts
 requests
 groq
 python-dotenv
