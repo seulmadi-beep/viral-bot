@@ -8,6 +8,7 @@ GROQ_API_KEY     = os.environ["GROQ_API_KEY"]
 TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 
 
+
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
 TOPIC_PROMPT = """Generate a short viral video script (30-45 seconds).
