@@ -4,8 +4,13 @@ import asyncio
 import requests
 from groq import Groq
 
-GROQ_API_KEY     = os.environ["GROQ_API_KEY"]"]
-TELEGRAM_TOKEN = "8816458276:AAGnabqN9S3BAwS5HoCWlfJ8dvz0wGf38MA"
+GROQ_API_KEY     = os.environ["GROQ_API_KEY"]
+TELEGRAM_TOKEN   = "8816458276:AAGnabqN9S3BAwS5HoCWlfJ8dvz0wGf38MA"
+
+
+
+
+
 
 
 
