@@ -3,7 +3,8 @@ name: Viral Bot
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 9 * * *"
+    -- cron: "0 11 * * *"
+
 
 jobs:
   run-bot:
