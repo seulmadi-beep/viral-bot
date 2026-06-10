@@ -53,7 +53,10 @@ async def generate_tts(script, out_path="voice.mp3"):
 def create_video(title, audio_path, out_path="video.mp4"):
     print("Creating video...")
     safe_title = title.replace("'", "").replace('"', "")
-    cmd = "ffmpeg -f lavfi -i color=c=black:size=1080x1920:rate=30 -i " + audio_path + " -shortest -vf \"drawtext=text='" + safe_title + "':fontcolor=white:fontsize=60:x=(w-text_w)/2:y=(h-text_h)/2\" -c:v libx264 -c:a aac " + out_path + " -y"
+    cmd = "ffmpeg -f lavfi -i color=c=black:size=1080x1920:rate=30 -i " + audio_path
+    cmd += " -shortest -vf \"drawtext=text='" + safe_title
+    cmd += "':fontcolor=white:fontsize=60:x=(w-text_w)/2:y=(h-text_h)/2\""
+    cmd += " -c:v libx264 -c:a aac " + out_path + " -y"
     os.system(cmd)
     print("Video created:", out_path)
     return out_path
@@ -76,22 +79,54 @@ def upload_youtube(title, video_path):
     token = get_youtube_token()
     headers = {"Authorization": "Bearer " + token}
     metadata = json.dumps({
-        "snippet": {"title": title, "description": "Motivational content", "categoryId": "22"},
-        "status": {"privacyStatus": "public"}
-    })
-    resp = requests.post(
-        "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=multipart&part=snippet,status",
-        headers=headers,
-        files={
-            "metadata": ("metadata", metadata, "application/json; charset=UTF-8"),
-            "video": ("video.mp4", open(video_path, "rb"), "video/mp4")
+        "snippet": {
+            "title": title,
+            "description": "Motivational content",
+            "categoryId": "22"
+        },
+        "status": {
+            "privacyStatus": "public"
         }
-    )
+    })
+    with open(video_path, "rb") as video_file:
+        resp = requests.post(
+            "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=multipart&part=snippet,status",
+            headers=headers,
+            files={
+                "metadata": ("metadata", metadata, "application/json; charset=UTF-8"),
+                "video": ("video.mp4", video_file, "video/mp4")
+            }
+        )
     if resp.status_code in [200, 201]:
         print("YouTube uploaded!")
         return resp.json().get("id")
     else:
-        print("YouTube error:", resp.status_code, resp.text[:300])
+        print("YouTube error:", resp.status_code, resp.text[:300])else:
+        print("Telegram error:", resp.status_code)
+        sys.exit(1)
+
+async def main():
+    print("Starting...")
+    title, script = generate_script()
+    audio = await generate_tts(script)
+    video = create_video(title, audio)
+    yt_id = upload_youtube(title, video)
+    send_telegram(title, script, yt_id)
+    print("Done!")
+
+if name == "__main__":
+    asyncio.run(main())
         return None
 
-def send_telegram(title, script, yt_id=
+def send_telegram(title, script, yt_id=None):
+    print("Sending Telegram...")
+    msg = title + "\n\n" + script
+    if yt_id:
+        msg += "\n\nhttps://youtube.com/watch?v=" + yt_id
+    resp = requests.post(
+        "https://api.telegram.org/bot" + TELEGRAM_TOKEN + "/sendMessage",
+        json={"chat_id": TELEGRAM_CHAT_ID, "text": msg},
+        timeout=15
+    )
+    if resp.status_code == 200:
+        print("Telegram sent!")
