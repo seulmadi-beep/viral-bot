@@ -14,17 +14,17 @@ YT_REFRESH_TOKEN = os.environ.get("YOUTUBE_REFRESH_TOKEN", "")
 YT_CLIENT_ID = os.environ.get("YOUTUBE_CLIENT_ID", "")
 YT_CLIENT_SECRET = os.environ.get("YOUTUBE_CLIENT_SECRET", "")
 
-NUM_CLIPS = 3
+NUM_CLIPS = 5
 
-TOPIC_PROMPT = """Generate a short viral video script (30-40 seconds).
+TOPIC_PROMPT = """Generate a short viral video script (60-75 seconds).
 Topic: motivational / life advice
 Rules:
 - The SCRIPT must START with a shocking or curiosity-driven hook sentence (max 8 words).
-- Then 70-90 words of powerful motivational narration.
-- KEYWORDS: exactly 3 simple English nouns for cinematic stock footage, comma separated (examples: ocean, mountains, city night, running, sunrise, forest).
+- Then 150-180 words of powerful motivational narration.
+- KEYWORDS: exactly 5 simple English nouns for cinematic stock footage, comma separated (examples: ocean, mountains, city night, running, sunrise, forest).
 Format:
 TITLE: <catchy title, max 6 words>
-KEYWORDS: <word1, word2, word3>
+KEYWORDS: <word1, word2, word3, word4, word5>
 SCRIPT: <hook + narration in one paragraph>
 Return ONLY the above format, nothing else."""
 
@@ -34,7 +34,7 @@ def generate_script():
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": TOPIC_PROMPT}],
-        max_tokens=400,
+        max_tokens=700,
     )
     text = response.choices[0].message.content.strip()
     print("Groq done:", text[:100])
@@ -49,7 +49,7 @@ def generate_script():
     if not title:
         title = "Motivational Video"
     if not keywords:
-        keywords = "nature, ocean, sunrise"
+        keywords = "nature, ocean, sunrise, mountains, city"
     if not script:
         script = text
     return title, keywords, script
@@ -177,7 +177,7 @@ def build_video(clips, audio_path, subs_path, out_path="video.mp4"):
     for i, clip in enumerate(clips):
         seg = "seg" + str(i) + ".mp4"
         code = run_ffmpeg([
-            "-i", clip, "-t", str(seg_dur),
+            "-stream_loop", "-1", "-i", clip, "-t", str(seg_dur),
             "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30",
             "-an", "-c:v", "libx264", "-preset", "fast", seg, "-y"
         ])
