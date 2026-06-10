@@ -42,7 +42,8 @@ def generate_script():
         script = text
     return title, script
 
-async def generate_tts(script, out_path="voice.mp3"):
+async def yt_id = None  # upload_youtube(title, video)
+
     print("Generating TTS...")
     import edge_tts
     communicate = edge_tts.Communicate(script, voice="en-US-GuyNeural")
