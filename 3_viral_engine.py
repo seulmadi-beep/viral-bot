@@ -101,21 +101,7 @@ def upload_youtube(title, video_path):
         print("YouTube uploaded!")
         return resp.json().get("id")
     else:
-        print("YouTube error:", resp.status_code, resp.text[:300])else:
-        print("Telegram error:", resp.status_code)
-        sys.exit(1)
-
-async def main():
-    print("Starting...")
-    title, script = generate_script()
-    audio = await generate_tts(script)
-    video = create_video(title, audio)
-    yt_id = upload_youtube(title, video)
-    send_telegram(title, script, yt_id)
-    print("Done!")
-
-if name == "__main__":
-    asyncio.run(main())
+        print("YouTube error:", resp.status_code, resp.text[:300])
         return None
 
 def send_telegram(title, script, yt_id=None):
@@ -130,3 +116,18 @@ def send_telegram(title, script, yt_id=None):
     )
     if resp.status_code == 200:
         print("Telegram sent!")
+    else:
+        print("Telegram error:", resp.status_code)
+        sys.exit(1)
+
+async def main():
+    print("Starting...")
+    title, script = generate_script()
+    audio = await generate_tts(script)
+    video = create_video(title, audio)
+    yt_id = upload_youtube(title, video)
+    send_telegram(title, script, yt_id)
+    print("Done!")
+
+if __name__ == "__main__":
+    asyncio.run(main())
