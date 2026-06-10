@@ -104,20 +104,22 @@ def upload_youtube(title, video_path):
         print("YouTube error:", resp.status_code, resp.text[:300])
         return None
 
-def send_telegram(title, script, yt_id=None):
-    print("Sending Telegram...")
-    msg = title + "\n\n" + script
+def send_telegram(title, script, video_path, yt_id=None):
+    print("Sending Telegram video...")
+    caption = title + "\n\n" + script
     if yt_id:
-        msg += "\n\nhttps://youtube.com/watch?v=" + yt_id
-    resp = requests.post(
-        "https://api.telegram.org/bot" + TELEGRAM_TOKEN + "/sendMessage",
-        json={"chat_id": TELEGRAM_CHAT_ID, "text": msg},
-        timeout=15
-    )
+        caption += "\n\nhttps://youtube.com/watch?v=" + yt_id
+    with open(video_path, "rb") as video_file:
+        resp = requests.post(
+            "https://api.telegram.org/bot" + TELEGRAM_TOKEN + "/sendVideo",
+            data={"chat_id": TELEGRAM_CHAT_ID, "caption": caption[:1024]},
+            files={"video": video_file},
+            timeout=120
+        )
     if resp.status_code == 200:
-        print("Telegram sent!")
+        print("Telegram video sent!")
     else:
-        print("Telegram error:", resp.status_code)
+        print("Telegram error:", resp.status_code, resp.text[:200])
         sys.exit(1)
 
 async def main():
@@ -126,7 +128,7 @@ async def main():
     audio = await generate_tts(script)
     video = create_video(title, audio)
     yt_id = None  # upload_youtube(title, video) — YouTube موقتاً غیرفعال
-    send_telegram(title, script, yt_id)
+    send_telegram(title, script, video, yt_id)
     print("Done!")
 
 if __name__ == "__main__":
