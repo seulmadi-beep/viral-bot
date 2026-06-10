@@ -9,17 +9,23 @@ from groq import Groq
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
+PEXELS_API_KEY = os.environ["PEXELS_API_KEY"]
 YT_REFRESH_TOKEN = os.environ.get("YOUTUBE_REFRESH_TOKEN", "")
 YT_CLIENT_ID = os.environ.get("YOUTUBE_CLIENT_ID", "")
 YT_CLIENT_SECRET = os.environ.get("YOUTUBE_CLIENT_SECRET", "")
 
-FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+NUM_CLIPS = 3
 
-TOPIC_PROMPT = """Generate a short viral video script (30-45 seconds).
+TOPIC_PROMPT = """Generate a short viral video script (30-40 seconds).
 Topic: motivational / life advice
+Rules:
+- The SCRIPT must START with a shocking or curiosity-driven hook sentence (max 8 words).
+- Then 70-90 words of powerful motivational narration.
+- KEYWORDS: exactly 3 simple English nouns for cinematic stock footage, comma separated (examples: ocean, mountains, city night, running, sunrise, forest).
 Format:
-TITLE: <catchy title>
-SCRIPT: <narration text, 80-100 words>
+TITLE: <catchy title, max 6 words>
+KEYWORDS: <word1, word2, word3>
+SCRIPT: <hook + narration in one paragraph>
 Return ONLY the above format, nothing else."""
 
 def generate_script():
@@ -28,30 +34,51 @@ def generate_script():
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": TOPIC_PROMPT}],
-        max_tokens=300,
+        max_tokens=400,
     )
     text = response.choices[0].message.content.strip()
     print("Groq done:", text[:100])
-    title = ""
-    script = ""
+    title, keywords, script = "", "", ""
     for line in text.splitlines():
         if line.startswith("TITLE:"):
             title = line.replace("TITLE:", "").strip()
+        elif line.startswith("KEYWORDS:"):
+            keywords = line.replace("KEYWORDS:", "").strip()
         elif line.startswith("SCRIPT:"):
             script = line.replace("SCRIPT:", "").strip()
     if not title:
         title = "Motivational Video"
+    if not keywords:
+        keywords = "nature, ocean, sunrise"
     if not script:
         script = text
-    return title, script
+    return title, keywords, script
 
 async def generate_tts(script, out_path="voice.mp3"):
-    print("Generating TTS...")
+    print("Generating TTS with word timings...")
     import edge_tts
-    communicate = edge_tts.Communicate(script, voice="en-US-GuyNeural")
-    await asyncio.wait_for(communicate.save(out_path), timeout=60)
-    print("TTS saved:", out_path)
-    return out_path
+    communicate = edge_tts.Communicate(script, voice="en-US-GuyNeural", rate="+5%")
+    words = []
+    with open(out_path, "wb") as f:
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                f.write(chunk["data"])
+            elif chunk["type"] == "WordBoundary":
+                words.append({
+                    "text": chunk["text"],
+                    "start": chunk["offset"] / 10_000_000,
+                    "end": (chunk["offset"] + chunk["duration"]) / 10_000_000,
+                })
+    print("TTS saved:", out_path, "| words:", len(words))
+    return out_path, words
+
+def get_audio_duration(path):
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "csv=p=0", path],
+        capture_output=True, text=True
+    )
+    return float(result.stdout.strip())
 
 def run_ffmpeg(args):
     result = subprocess.run(["ffmpeg"] + args, capture_output=True, text=True)
@@ -59,34 +86,122 @@ def run_ffmpeg(args):
         print("FFMPEG ERROR:", result.stderr[-500:])
     return result.returncode
 
-def create_video(title, audio_path, out_path="video.mp4"):
-    print("Creating video...")
-    safe_title = title.replace("'", "").replace('"', "").replace(":", "")
+def download_pexels_clips(keywords, count=NUM_CLIPS):
+    print("Searching Pexels:", keywords)
+    clips = []
+    kw_list = [k.strip() for k in keywords.split(",") if k.strip()]
+    for i, kw in enumerate(kw_list[:count]):
+        try:
+            resp = requests.get(
+                "https://api.pexels.com/videos/search",
+                headers={"Authorization": PEXELS_API_KEY},
+                params={"query": kw, "orientation": "portrait", "per_page": 3},
+                timeout=30
+            )
+            videos = resp.json().get("videos", [])
+            if not videos:
+                print("No results for:", kw)
+                continue
+            files = videos[0].get("video_files", [])
+            files = sorted(files, key=lambda f: f.get("height") or 0, reverse=True)
+            link = None
+            for f in files:
+                if (f.get("height") or 0) >= 1080:
+                    link = f["link"]
+            if not link and files:
+                link = files[0]["link"]
+            if not link:
+                continue
+            path = "clip" + str(i) + ".mp4"
+            print("Downloading:", kw)
+            with requests.get(link, stream=True, timeout=120) as r:
+                with open(path, "wb") as out:
+                    for chunk in r.iter_content(chunk_size=1024 * 256):
+                        out.write(chunk)
+            clips.append(path)
+        except Exception as e:
+            print("Pexels error for", kw, ":", str(e)[:200])
+    print("Clips downloaded:", len(clips))
+    return clips
 
-    # تلاش اول: با متن روی ویدیو
-    drawtext = ("drawtext=fontfile=" + FONT + ":text='" + safe_title +
-                "':fontcolor=white:fontsize=60:x=(w-text_w)/2:y=(h-text_h)/2")
-    code = run_ffmpeg([
-        "-f", "lavfi", "-i", "color=c=black:size=1080x1920:rate=30",
-        "-i", audio_path,
-        "-shortest", "-vf", drawtext,
-        "-c:v", "libx264", "-c:a", "aac", out_path, "-y"
-    ])
+def ass_time(t):
+    h = int(t // 3600)
+    m = int((t % 3600) // 60)
+    s = t % 60
+    return "{}:{:02d}:{:05.2f}".format(h, m, s)
 
-    # تلاش دوم: بدون متن (اگه drawtext مشکل داشت)
-    if code != 0 or not os.path.exists(out_path):
-        print("Retrying without text overlay...")
+def build_subtitles(words, out_path="subs.ass"):
+    header = """[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Word,DejaVu Sans,115,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,10,2,5,60,60,0,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+    lines = [header]
+    for w in words:
+        end = max(w["end"], w["start"] + 0.12)
+        lines.append("Dialogue: 0,{},{},Word,,0,0,0,,{}".format(
+            ass_time(w["start"]), ass_time(end), w["text"].upper()))
+    with open(out_path, "w") as f:
+        f.write("\n".join(lines))
+    print("Subtitles built:", len(words), "words")
+    return out_path
+
+def build_video(clips, audio_path, subs_path, out_path="video.mp4"):
+    print("Building video...")
+    duration = get_audio_duration(audio_path)
+    print("Audio duration:", duration)
+
+    if not clips:
+        print("No clips! Using black background fallback.")
         code = run_ffmpeg([
-            "-f", "lavfi", "-i", "color=c=black:size=1080x1920:rate=30",
+            "-f", "lavfi", "-i",
+            "color=c=black:size=1080x1920:rate=30:d=" + str(duration),
             "-i", audio_path,
-            "-shortest",
-            "-c:v", "libx264", "-c:a", "aac", out_path, "-y"
+            "-vf", "ass=" + subs_path,
+            "-shortest", "-c:v", "libx264", "-preset", "fast",
+            "-c:a", "aac", out_path, "-y"
         ])
+        if code != 0 or not os.path.exists(out_path):
+            sys.exit(1)
+        return out_path
 
-    if code != 0 or not os.path.exists(out_path):
-        print("Video creation FAILED completely.")
+    seg_dur = duration / len(clips) + 0.5
+    seg_files = []
+    for i, clip in enumerate(clips):
+        seg = "seg" + str(i) + ".mp4"
+        code = run_ffmpeg([
+            "-i", clip, "-t", str(seg_dur),
+            "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30",
+            "-an", "-c:v", "libx264", "-preset", "fast", seg, "-y"
+        ])
+        if code == 0 and os.path.exists(seg):
+            seg_files.append(seg)
+    if not seg_files:
+        print("All segments failed!")
         sys.exit(1)
 
+    with open("list.txt", "w") as f:
+        for seg in seg_files:
+            f.write("file '" + seg + "'\n")
+
+    code = run_ffmpeg([
+        "-f", "concat", "-safe", "0", "-i", "list.txt",
+        "-i", audio_path,
+        "-vf", "ass=" + subs_path,
+        "-map", "0:v", "-map", "1:a",
+        "-shortest", "-c:v", "libx264", "-preset", "fast",
+        "-c:a", "aac", out_path, "-y"
+    ])
+    if code != 0 or not os.path.exists(out_path):
+        print("Final video FAILED.")
+        sys.exit(1)
     print("Video created:", out_path, os.path.getsize(out_path), "bytes")
     return out_path
 
@@ -143,7 +258,7 @@ def send_telegram(title, script, video_path, yt_id=None):
             "https://api.telegram.org/bot" + TELEGRAM_TOKEN + "/sendVideo",
             data={"chat_id": TELEGRAM_CHAT_ID, "caption": caption[:1024]},
             files={"video": video_file},
-            timeout=120
+            timeout=180
         )
     if resp.status_code == 200:
         print("Telegram video sent!")
@@ -153,9 +268,11 @@ def send_telegram(title, script, video_path, yt_id=None):
 
 async def main():
     print("Starting...")
-    title, script = generate_script()
-    audio = await generate_tts(script)
-    video = create_video(title, audio)
+    title, keywords, script = generate_script()
+    audio, words = await generate_tts(script)
+    clips = download_pexels_clips(keywords)
+    subs = build_subtitles(words)
+    video = build_video(clips, audio, subs)
     yt_id = None  # upload_youtube(title, video) — YouTube موقتاً غیرفعال
     send_telegram(title, script, video, yt_id)
     print("Done!")
