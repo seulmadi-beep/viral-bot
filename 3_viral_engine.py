@@ -8,9 +8,9 @@ from groq import Groq
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 TELEGRAM_TOKEN = "8816458276:AAGnabqN9S3BAwS5HoCWlfJ8dvz0wGf38MA"
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
-YT_REFRESH_TOKEN = os.environ["YOUTUBE_REFRESH_TOKEN"]
-YT_CLIENT_ID = os.environ["YOUTUBE_CLIENT_ID"]
-YT_CLIENT_SECRET = os.environ["YOUTUBE_CLIENT_SECRET"]
+YT_REFRESH_TOKEN = os.environ.get("YOUTUBE_REFRESH_TOKEN", "")
+YT_CLIENT_ID = os.environ.get("YOUTUBE_CLIENT_ID", "")
+YT_CLIENT_SECRET = os.environ.get("YOUTUBE_CLIENT_SECRET", "")
 
 TOPIC_PROMPT = """Generate a short viral video script (30-45 seconds).
 Topic: motivational / life advice
@@ -125,7 +125,7 @@ async def main():
     title, script = generate_script()
     audio = await generate_tts(script)
     video = create_video(title, audio)
-    yt_id = upload_youtube(title, video)
+    yt_id = None  # upload_youtube(title, video) — YouTube موقتاً غیرفعال
     send_telegram(title, script, yt_id)
     print("Done!")
 
