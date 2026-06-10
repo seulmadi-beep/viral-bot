@@ -1,6 +1,7 @@
 import os
 import sys
 import asyncio
+import subprocess
 import requests
 import json
 from groq import Groq
@@ -11,6 +12,8 @@ TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 YT_REFRESH_TOKEN = os.environ.get("YOUTUBE_REFRESH_TOKEN", "")
 YT_CLIENT_ID = os.environ.get("YOUTUBE_CLIENT_ID", "")
 YT_CLIENT_SECRET = os.environ.get("YOUTUBE_CLIENT_SECRET", "")
+
+FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
 TOPIC_PROMPT = """Generate a short viral video script (30-45 seconds).
 Topic: motivational / life advice
@@ -50,15 +53,41 @@ async def generate_tts(script, out_path="voice.mp3"):
     print("TTS saved:", out_path)
     return out_path
 
+def run_ffmpeg(args):
+    result = subprocess.run(["ffmpeg"] + args, capture_output=True, text=True)
+    if result.returncode != 0:
+        print("FFMPEG ERROR:", result.stderr[-500:])
+    return result.returncode
+
 def create_video(title, audio_path, out_path="video.mp4"):
     print("Creating video...")
-    safe_title = title.replace("'", "").replace('"', "")
-    cmd = "ffmpeg -f lavfi -i color=c=black:size=1080x1920:rate=30 -i " + audio_path
-    cmd += " -shortest -vf \"drawtext=text='" + safe_title
-    cmd += "':fontcolor=white:fontsize=60:x=(w-text_w)/2:y=(h-text_h)/2\""
-    cmd += " -c:v libx264 -c:a aac " + out_path + " -y"
-    os.system(cmd)
-    print("Video created:", out_path)
+    safe_title = title.replace("'", "").replace('"', "").replace(":", "")
+
+    # تلاش اول: با متن روی ویدیو
+    drawtext = ("drawtext=fontfile=" + FONT + ":text='" + safe_title +
+                "':fontcolor=white:fontsize=60:x=(w-text_w)/2:y=(h-text_h)/2")
+    code = run_ffmpeg([
+        "-f", "lavfi", "-i", "color=c=black:size=1080x1920:rate=30",
+        "-i", audio_path,
+        "-shortest", "-vf", drawtext,
+        "-c:v", "libx264", "-c:a", "aac", out_path, "-y"
+    ])
+
+    # تلاش دوم: بدون متن (اگه drawtext مشکل داشت)
+    if code != 0 or not os.path.exists(out_path):
+        print("Retrying without text overlay...")
+        code = run_ffmpeg([
+            "-f", "lavfi", "-i", "color=c=black:size=1080x1920:rate=30",
+            "-i", audio_path,
+            "-shortest",
+            "-c:v", "libx264", "-c:a", "aac", out_path, "-y"
+        ])
+
+    if code != 0 or not os.path.exists(out_path):
+        print("Video creation FAILED completely.")
+        sys.exit(1)
+
+    print("Video created:", out_path, os.path.getsize(out_path), "bytes")
     return out_path
 
 def get_youtube_token():
