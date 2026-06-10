@@ -34,4 +34,5 @@ def generate_script():
             title = line.replace("TITLE:", "").strip()
         elif line.startswith("SCRIPT:"):
             script = line.replace("SCRIPT:", "").strip()
-    if not title or
+        if not title or not script:
+
