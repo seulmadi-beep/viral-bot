@@ -4,6 +4,7 @@ import asyncio
 import subprocess
 import requests
 import json
+import random
 from groq import Groq
 
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
@@ -16,12 +17,34 @@ YT_CLIENT_SECRET = os.environ.get("YOUTUBE_CLIENT_SECRET", "")
 
 NUM_CLIPS = 5
 
-TOPIC_PROMPT = """Generate a short viral video script (60-75 seconds).
-Topic: motivational / life advice
+THEMES = [
+    "discipline and daily habits",
+    "overcoming fear and self-doubt",
+    "failure as a teacher",
+    "waking up early and owning your morning",
+    "money mindset and building wealth",
+    "consistency beats talent",
+    "cutting toxic people and environments",
+    "patience and playing the long game",
+    "comparison is the thief of joy",
+    "taking risks while you are young",
+    "loneliness on the path to success",
+    "turning pain into power",
+    "stop waiting for motivation",
+    "your future self is watching you",
+    "small steps compound into big results",
+]
+
+def build_prompt():
+    theme = random.choice(THEMES)
+    print("Theme:", theme)
+    return """Generate a short viral video script (60-75 seconds).
+Topic: motivational — specifically about: """ + theme + """
 Rules:
 - The SCRIPT must START with a shocking or curiosity-driven hook sentence (max 8 words).
 - Then 150-180 words of powerful motivational narration.
-- KEYWORDS: exactly 5 simple English nouns for cinematic stock footage, comma separated (examples: ocean, mountains, city night, running, sunrise, forest).
+- Avoid generic cliches. Be specific and punchy.
+- KEYWORDS: exactly 5 simple English nouns for cinematic stock footage matching the theme, comma separated.
 Format:
 TITLE: <catchy title, max 6 words>
 KEYWORDS: <word1, word2, word3, word4, word5>
@@ -33,8 +56,9 @@ def generate_script():
     client = Groq(api_key=GROQ_API_KEY)
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": TOPIC_PROMPT}],
+        messages=[{"role": "user", "content": build_prompt()}],
         max_tokens=700,
+        temperature=1.1,
     )
     text = response.choices[0].message.content.strip()
     print("Groq done:", text[:100])
@@ -95,14 +119,15 @@ def download_pexels_clips(keywords, count=NUM_CLIPS):
             resp = requests.get(
                 "https://api.pexels.com/videos/search",
                 headers={"Authorization": PEXELS_API_KEY},
-                params={"query": kw, "orientation": "portrait", "per_page": 3},
+                params={"query": kw, "orientation": "portrait", "per_page": 10},
                 timeout=30
             )
             videos = resp.json().get("videos", [])
             if not videos:
                 print("No results for:", kw)
                 continue
-            files = videos[0].get("video_files", [])
+            video = random.choice(videos)
+            files = video.get("video_files", [])
             files = sorted(files, key=lambda f: f.get("height") or 0, reverse=True)
             link = None
             for f in files:
