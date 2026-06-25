@@ -298,7 +298,8 @@ async def main():
     clips = download_pexels_clips(keywords)
     subs = build_subtitles(words)
     video = build_video(clips, audio, subs)
-    yt_id = None  # upload_youtube(title, video) — YouTube موقتاً غیرفعال
+    yyt_id = upload_youtube(title, video)
+
     send_telegram(title, script, video, yt_id)
     print("Done!")
 
