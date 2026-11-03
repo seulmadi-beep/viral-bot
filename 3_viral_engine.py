@@ -238,9 +238,9 @@ def get_youtube_token():
         "grant_type": "refresh_token",
     })
     data = resp.json()
-    print("YouTube token response:", str(data)[:200])
+    print("YouTube token received:", "access_token" in data)
     if "access_token" not in data:
-        raise ValueError("YouTube auth failed: " + str(data))
+        raise ValueError("YouTube auth failed: " + str(data.get("error", "unknown error")))
     return data["access_token"]
 
 def upload_youtube(title, video_path):
@@ -298,7 +298,7 @@ async def main():
     clips = download_pexels_clips(keywords)
     subs = build_subtitles(words)
     video = build_video(clips, audio, subs)
-    yyt_id = upload_youtube(title, video)
+    yt_id = upload_youtube(title, video)
 
     send_telegram(title, script, video, yt_id)
     print("Done!")
