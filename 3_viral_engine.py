@@ -17,6 +17,10 @@ YT_CLIENT_SECRET = os.environ.get("YOUTUBE_CLIENT_SECRET", "")
 
 NUM_CLIPS = 5
 
+# Groq retires models over time; try a list so one removal does not stop the bot.
+GROQ_MODELS = [m for m in [os.environ.get("GROQ_MODEL", "")] if m] + [
+    "openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile"]
+
 THEMES = [
     "discipline and daily habits",
     "overcoming fear and self-doubt",
@@ -54,16 +58,29 @@ Return ONLY the above format, nothing else."""
 def generate_script():
     print("Calling Groq...")
     client = Groq(api_key=GROQ_API_KEY)
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": build_prompt()}],
-        max_tokens=700,
-        temperature=1.1,
-    )
-    text = response.choices[0].message.content.strip()
+    prompt = build_prompt()
+    text = ""
+    for model in GROQ_MODELS:
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=4000,  # reasoning models need room before the answer
+                temperature=1.0,
+            )
+            text = (response.choices[0].message.content or "").strip()
+            if text:
+                print("Groq model:", model)
+                break
+        except Exception as e:
+            print("Groq", model, "failed:", str(e)[:160])
+    if not text:
+        print("All Groq models failed.")
+        sys.exit(1)
     print("Groq done:", text[:100])
     title, keywords, script = "", "", ""
     for line in text.splitlines():
+        line = line.strip().replace("**", "").lstrip("#* ").strip()
         if line.startswith("TITLE:"):
             title = line.replace("TITLE:", "").strip()
         elif line.startswith("KEYWORDS:"):
@@ -81,7 +98,12 @@ def generate_script():
 async def generate_tts(script, out_path="voice.mp3"):
     print("Generating TTS with word timings...")
     import edge_tts
-    communicate = edge_tts.Communicate(script, voice="en-US-GuyNeural", rate="+5%")
+    try:
+        # edge-tts 7+ only sends word timings when asked; without them there are no subtitles.
+        communicate = edge_tts.Communicate(script, voice="en-US-GuyNeural", rate="+5%",
+                                           boundary="WordBoundary")
+    except TypeError:
+        communicate = edge_tts.Communicate(script, voice="en-US-GuyNeural", rate="+5%")
     words = []
     with open(out_path, "wb") as f:
         async for chunk in communicate.stream():
@@ -172,7 +194,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     for w in words:
         end = max(w["end"], w["start"] + 0.12)
         lines.append("Dialogue: 0,{},{},Word,,0,0,0,,{}".format(
-            ass_time(w["start"]), ass_time(end), w["text"].upper()))
+            ass_time(w["start"]), ass_time(end),
+            w["text"].upper().replace("{", "(").replace("}", ")").replace("\\", "")))
     with open(out_path, "w") as f:
         f.write("\n".join(lines))
     print("Subtitles built:", len(words), "words")
@@ -236,7 +259,7 @@ def get_youtube_token():
         "client_secret": YT_CLIENT_SECRET,
         "refresh_token": YT_REFRESH_TOKEN,
         "grant_type": "refresh_token",
-    })
+    }, timeout=30)
     data = resp.json()
     print("YouTube token received:", "access_token" in data)
     if "access_token" not in data:
@@ -244,8 +267,15 @@ def get_youtube_token():
     return data["access_token"]
 
 def upload_youtube(title, video_path):
+    if not (YT_REFRESH_TOKEN and YT_CLIENT_ID and YT_CLIENT_SECRET):
+        print("YouTube secrets missing: skipping upload")
+        return None
     print("Uploading to YouTube...")
-    token = get_youtube_token()
+    try:
+        token = get_youtube_token()
+    except Exception as e:
+        print("YouTube auth error:", str(e)[:200])
+        return None
     headers = {"Authorization": "Bearer " + token}
     metadata = json.dumps({
         "snippet": {
@@ -264,7 +294,8 @@ def upload_youtube(title, video_path):
             files={
                 "metadata": ("metadata", metadata, "application/json; charset=UTF-8"),
                 "video": ("video.mp4", video_file, "video/mp4")
-            }
+            },
+            timeout=600
         )
     if resp.status_code in [200, 201]:
         print("YouTube uploaded!")
